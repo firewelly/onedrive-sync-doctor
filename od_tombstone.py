@@ -58,6 +58,11 @@ def main():
     args = ap.parse_args()
 
     db = od.db_path(args.account)
+    if od.is_windows():
+        sys.exit("This tombstone tool targets the macOS dbfs.db metadata tree.\n"
+                 "On Windows the equivalent is:\n"
+                 "  python od_audit.py --details\n"
+                 "  python od_fix_postponed.py <account>")
     if args.apply:
         od.assert_no_processes()
 

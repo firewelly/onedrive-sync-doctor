@@ -27,6 +27,10 @@ def main():
     args = ap.parse_args()
 
     db = od.db_path(args.account)
+    if od.is_windows():
+        sys.exit("This tool targets the macOS dbfs.db change records.\n"
+                 "On Windows use od_fix_postponed.py, which handles the same\n"
+                 "orphan-change problem in SyncEngineDatabase.db.")
     if args.apply:
         od.assert_no_processes()
 

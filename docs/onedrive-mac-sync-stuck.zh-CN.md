@@ -448,7 +448,7 @@ cp -p "$DB" "$DB-wal" "$DB-shm" ~/od-db-backup-$(date +%Y%m%d)/
 
 上面这些 SQL、路径解析、深度排序、事务回滚，整理成了一组脚本：
 
-**github.com/firewelly/onedrive-mac-sync-doctor**
+**github.com/firewelly/onedrive-sync-doctor**（macOS + Windows）
 
 - 全部只读优先，写操作默认 dry-run
 - 动数据库前强制检查 OneDrive 已退出

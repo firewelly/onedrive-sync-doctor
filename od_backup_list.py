@@ -30,6 +30,12 @@ def main():
     args = ap.parse_args()
 
     db = od.db_path(args.account)
+    if od.is_windows():
+        sys.exit("This backup-list tool depends on the macOS dbfs_mftrecord tree.\n"
+                 "On Windows the postponed tables do not carry full paths; back up\n"
+                 "the sync root with robocopy before any destructive action:\n"
+                 f'  robocopy "{od.mount_path(args.account) or "<sync root>"}" '
+                 'X:\\od-backup /MIR /XJ')
     mount = od.mount_path(args.account)
     if not mount:
         raise SystemExit("cannot find the CloudStorage mount for " + args.account)

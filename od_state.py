@@ -3,7 +3,9 @@
 """Snapshot the state of every local OneDrive account (read-only).
 
 Outputs JSON with client version, running processes, and per-account counters,
-including the number that drives the "Syncing N files" UI indicator.
+including the number that drives the "Syncing N files" UI indicator. On Windows
+that number is ``ChangesToProcess`` from SyncDiagnostics.log plus the postponed
+queue breakdown.
 
     python3 od_state.py
     python3 od_state.py Personal --pretty
@@ -93,14 +95,42 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("accounts", nargs="*", help="account names (default: all)")
     ap.add_argument("--pretty", action="store_true", help="indent the JSON")
+    ap.add_argument("--integrity", action="store_true",
+                    help="also run PRAGMA integrity_check (slow on large DBs)")
     args = ap.parse_args()
 
     targets = args.accounts or od.accounts()
     if not targets:
-        raise SystemExit("No OneDrive accounts found under:\n  " + od.GROUP_CONTAINER)
+        raise SystemExit("No OneDrive accounts found under:\n  " + od.SETTINGS_DIR)
+
+    if od.is_windows():
+        import od_win
+        state = {
+            "collected_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "platform": "windows",
+            "onedrive_version": od.client_version(),
+            "processes": od.processes(),
+            "accounts": {
+                name: {"db_path": od.db_path(name),
+                       "mount": od.mount_path(name),
+                       "db_exists": os.path.exists(od.db_path(name)),
+                       **od_win.counts(name)}
+                for name in targets
+            },
+        }
+        if args.integrity:
+            for name, info in state["accounts"].items():
+                if info["db_exists"]:
+                    analysis = od_win.analyze(name, integrity=True)
+                    info["integrity"] = analysis.get("integrity")
+        json.dump(state, sys.stdout, ensure_ascii=False,
+                  indent=2 if args.pretty else None)
+        sys.stdout.write("\n")
+        return
 
     state = {
         "collected_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "platform": "macos",
         "onedrive_version": client_version(),
         "pkg_info": sh(["/usr/sbin/pkgutil", "--pkg-info", "com.microsoft.OneDrive"],
                        timeout=60) or None,

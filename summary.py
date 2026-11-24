@@ -7,6 +7,9 @@ a handful of symlinks and the system temp record are expected and harmless,
 because OneDrive will never sync those and they never resolve on their own.
 What matters is ghosts (metadata pointing at deleted paths) and stubborn items
 (files that exist but whose change never lands).
+
+On Windows the verdict is driven by ChangesToProcess plus whether the postponed
+rows are orphans (cannot ever resolve) or still-resolving work in flight.
 """
 import json
 import os
@@ -39,11 +42,63 @@ def state():
         return None
 
 
+def summary_windows(s):
+    def fmt(value):
+        return "-" if value is None else value
+
+    print("OneDrive 版本 :", s.get("onedrive_version"))
+    print("平台         : Windows")
+    print()
+
+    needs_attention = False
+    for name, a in (s.get("accounts") or {}).items():
+        if not a.get("db_exists"):
+            print(f"[{name}] 未找到数据库: {a.get('db_path')}")
+            print()
+            continue
+
+        verdict = a.get("verdict")
+        counter = a.get("changes_to_process")
+        if verdict in ("stuck-orphan", "stuck-mixed"):
+            needs_attention = True
+        mark = {"clean": "干净",
+                "stuck-orphan": "卡住（全部是孤儿单）",
+                "stuck-mixed": "卡住（孤儿单 + 仍在解析的行）",
+                "queued": "在途（等待观察）",
+                "no-database": "未找到数据库"}.get(verdict, str(verdict))
+
+        print(f"[{name}]  待处理 {counter}   {mark}")
+        print(f"    队列    文件 {a.get('postponed_files', 0)} / "
+              f"文件夹 {a.get('postponed_folders', 0)}   "
+              f"孤儿 {a.get('orphan_files', 0)} / {a.get('orphan_folders', 0)}   "
+              f"累计重试 {a.get('retry_total', 0):,}")
+        extra = (f"    诊断    FilesToDownload={fmt(a.get('files_to_download'))} "
+                 f"numFileInWarning={fmt(a.get('num_file_in_warning'))} "
+                 f"syncStallDetected={fmt(a.get('sync_stall_detected'))}")
+        if not a.get("has_report"):
+            extra += "（日志暂无报告，数字取自 postponed 队列）"
+        print(extra)
+        if a.get("integrity"):
+            print(f"    完整性  {a.get('integrity')}")
+        print()
+
+    print("-" * 56)
+    if needs_attention:
+        print("结论: 有需要处理的条目。先运行 od_fix_postponed.py <账户> 预览；"
+              "apply 前先 OneDrive.exe /shutdown。")
+    else:
+        print("结论: 健康。ChangesToProcess=0 且队列为空。")
+    return 0
+
+
 def main():
     s = state()
     if not s:
-        print("无法读取状态，请直接运行: python3 tools/od_state.py")
+        print("无法读取状态，请直接运行: python3 od_state.py")
         return 1
+
+    if s.get("platform") == "windows":
+        return summary_windows(s)
 
     print("OneDrive 版本 :", s.get("onedrive_version"))
     load = s.get("load") or ""

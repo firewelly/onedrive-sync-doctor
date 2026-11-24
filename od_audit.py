@@ -4,8 +4,12 @@
 
 Read-only. This is the diagnostic you run first.
 
-For each account it takes every record with ph_insync = 0, resolves its real
-path on disk, and sorts it into one of five buckets:
+On Windows the database has no per-item "not synced" flag, so this delegates to
+``od_win.py``: it reads ``ChangesToProcess`` from SyncDiagnostics.log and the
+two postponed-change tables, then proves which rows are orphans.
+
+On macOS it takes every record with ph_insync = 0, resolves its real path on
+disk, and sorts it into one of five buckets:
 
     ghost          metadata points at a path that no longer exists
     symlink        symlinks and AppleDouble (._*) files: OneDrive never syncs these
@@ -128,6 +132,8 @@ def audit(account, details=False, quiet=False):
 
 def bucket_counts(account):
     """Category counts only, nothing printed. Used by summary.py."""
+    if od.is_windows():
+        raise SystemExit("bucket_counts is macOS-only; summary.py uses od_win")
     return audit(account, quiet=True)
 
 
@@ -136,6 +142,20 @@ def main():
     ap.add_argument("accounts", nargs="*", help="account names (default: all)")
     ap.add_argument("--details", action="store_true", help="list item paths")
     args = ap.parse_args()
+
+    if od.is_windows():
+        import od_win
+        for name in (args.accounts or od.accounts()):
+            od_win.audit_text(name, args.details)
+        print("\nNext steps:")
+        print("  clean        -> nothing to do")
+        print("  stuck-orphan -> python od_fix_postponed.py <account>")
+        print("                  (preview), then --apply after OneDrive.exe /shutdown")
+        print("  stuck-mixed  -> preview with od_fix_postponed.py; --apply removes")
+        print("                  orphan rows only, review live rows first")
+        print("  queued       -> wait and re-check; if it never moves, run --details")
+        return
+
     for name in (args.accounts or od.accounts()):
         audit(name, args.details)
     print("\nNext steps:")
